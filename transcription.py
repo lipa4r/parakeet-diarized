@@ -10,7 +10,7 @@ from models import WhisperSegment, TranscriptionResponse
 
 logger = logging.getLogger(__name__)
 
-def load_model(model_id: str = "nvidia/parakeet-tdt-0.6b-v2"):
+def load_model(model_id: str = "nvidia/parakeet-tdt-0.6b-v3"):
     """
     Load the ASR model (Parakeet-TDT)
 
@@ -21,11 +21,12 @@ def load_model(model_id: str = "nvidia/parakeet-tdt-0.6b-v2"):
         The loaded model
     """
     try:
-        from nemo.collections.asr.models import EncDecCTCModelBPE
+        import nemo.collections.asr as nemo_asr
 
         logger.info(f"Loading model {model_id}")
-        # For Parakeet-TDT, we use the NeMo toolkit
-        model = EncDecCTCModelBPE.from_pretrained(model_id)
+        # Use ASRModel base class — auto-detects the correct subclass (CTC/TDT/RNNT)
+        # from the checkpoint config, so it works with any NeMo ASR model.
+        model = nemo_asr.models.ASRModel.from_pretrained(model_id)
 
         # Move model to GPU if available
         if torch.cuda.is_available():

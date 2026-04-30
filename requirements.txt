@@ -1,9 +1,10 @@
-nemo_toolkit
+nemo_toolkit[asr]
 fastapi
 uvicorn
 python-multipart
 pydantic
 torch
+torchaudio
 numpy
 hydra-core
 lightning
@@ -23,3 +24,6 @@ pydub
 ffmpeg-python
 soundfile
 cuda-python
+python-dotenv
+omegaconf
+scipy
