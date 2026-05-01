@@ -29,6 +29,20 @@ FastAPI serwer transkrypcji audio zgodny z API OpenAI Whisper (`/v1/audio/transc
 | `CHUNK_DURATION` | Długość fragmentu audio (s) | `500` |
 | `PORT` | Port serwera | `8000` |
 | `TEMP_DIR` | Katalog na pliki tymczasowe | `/tmp/parakeet` |
+| `USE_CUDA_GRAPH_DECODER` | Włącz CUDA graph decoder w NeMo (RNNT/TDT greedy) | `false` |
+| `CUDNN_BENCHMARK` | `torch.backends.cudnn.benchmark` | `false` |
+| `FORCE_FP32` | Wyłącz autocast w `model.transcribe()` (FP32) | `false` |
+
+### Parametry endpointu (Form, override per request)
+
+Wszystkie opcjonalne — `None` oznacza użycie wartości z configu.
+
+| Parametr | Opis |
+|----------|------|
+| `chunk_duration` | Długość fragmentu audio (s) na ten request |
+| `use_cuda_graph_decoder` | Toggle CUDA graph decodera (idempotent, `change_decoding_strategy`) |
+| `force_fp32` | FP32 dla tej transkrypcji (`autocast(enabled=False)`) |
+| `cudnn_benchmark` | Globalny flag torch — uwaga: sticky, wpływa na kolejne requesty |
 
 ## Kluczowe pliki
 

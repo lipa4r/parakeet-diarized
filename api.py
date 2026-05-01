@@ -56,9 +56,16 @@ def create_app() -> FastAPI:
             else:
                 logger.warning("CUDA not available, using CPU (this will be slow)")
 
+            # Apply global cuDNN benchmark setting from config
+            torch.backends.cudnn.benchmark = config.cudnn_benchmark
+            logger.info(f"cuDNN benchmark: {config.cudnn_benchmark}")
+
             # Load the ASR model
             model_id = config.model_id
-            asr_model = load_model(model_id)
+            asr_model = load_model(
+                model_id,
+                use_cuda_graph_decoder=config.use_cuda_graph_decoder,
+            )
             logger.info(f"Model {model_id} loaded successfully")
 
             # Initialize diarization if token is available
@@ -85,7 +92,11 @@ def create_app() -> FastAPI:
         vad_filter: bool = Form(False),
         word_timestamps: bool = Form(False),
         diarize: bool = Form(True),
-        include_diarization_in_text: Optional[bool] = Form(None)
+        include_diarization_in_text: Optional[bool] = Form(None),
+        chunk_duration: Optional[int] = Form(None),
+        use_cuda_graph_decoder: Optional[bool] = Form(None),
+        force_fp32: Optional[bool] = Form(None),
+        cudnn_benchmark: Optional[bool] = Form(None),
     ):
         """
         Transcribe audio file using the Parakeet-TDT model
@@ -114,9 +125,16 @@ def create_app() -> FastAPI:
             # Convert to WAV format
             wav_file = convert_audio_to_wav(str(temp_file))
 
+            # Resolve per-request stability flags (None -> fall back to config)
+            effective_chunk_duration = chunk_duration if chunk_duration is not None else config.chunk_duration
+            effective_use_cuda_graph_decoder = use_cuda_graph_decoder if use_cuda_graph_decoder is not None else config.use_cuda_graph_decoder
+            effective_force_fp32 = force_fp32 if force_fp32 is not None else config.force_fp32
+            if cudnn_benchmark is not None:
+                # Sticky toggle — affects subsequent requests too
+                torch.backends.cudnn.benchmark = cudnn_benchmark
+
             # Split audio into chunks if it's too long
-            chunk_duration = config.chunk_duration
-            audio_chunks = split_audio_into_chunks(wav_file, chunk_duration=chunk_duration)
+            audio_chunks = split_audio_into_chunks(wav_file, chunk_duration=effective_chunk_duration)
 
             # Initialize diarization if requested
             diarizer = None
@@ -152,12 +170,14 @@ def create_app() -> FastAPI:
                     asr_model,
                     chunk_path,
                     language=language,
-                    word_timestamps=word_timestamps
+                    word_timestamps=word_timestamps,
+                    force_fp32=effective_force_fp32,
+                    use_cuda_graph_decoder=effective_use_cuda_graph_decoder,
                 )
 
                 # Add offset to timestamps if not the first chunk
                 if i > 0:
-                    offset = i * chunk_duration
+                    offset = i * effective_chunk_duration
                     for segment in chunk_segments:
                         segment.start += offset
                         segment.end += offset

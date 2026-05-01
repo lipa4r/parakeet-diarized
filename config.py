@@ -35,6 +35,11 @@ DEFAULT_DIARIZE = True
 DEFAULT_NUM_SPEAKERS = None  # None means auto-detection
 DEFAULT_INCLUDE_DIARIZATION_IN_TEXT = True  # Whether to include speaker labels in the text
 
+# GPU/inference stability flags
+DEFAULT_USE_CUDA_GRAPH_DECODER = False  # NeMo RNNT/TDT greedy CUDA graph capture
+DEFAULT_CUDNN_BENCHMARK = False         # torch.backends.cudnn.benchmark
+DEFAULT_FORCE_FP32 = False              # disable autocast in model.transcribe()
+
 
 class Config:
     """Global configuration for Parakeet"""
@@ -66,6 +71,11 @@ class Config:
         self.include_diarization_in_text = os.environ.get("INCLUDE_DIARIZATION_IN_TEXT", str(DEFAULT_INCLUDE_DIARIZATION_IN_TEXT)).lower() == "true"
         self.default_num_speakers = DEFAULT_NUM_SPEAKERS
 
+        # GPU/inference stability flags
+        self.use_cuda_graph_decoder = os.environ.get("USE_CUDA_GRAPH_DECODER", str(DEFAULT_USE_CUDA_GRAPH_DECODER)).lower() == "true"
+        self.cudnn_benchmark = os.environ.get("CUDNN_BENCHMARK", str(DEFAULT_CUDNN_BENCHMARK)).lower() == "true"
+        self.force_fp32 = os.environ.get("FORCE_FP32", str(DEFAULT_FORCE_FP32)).lower() == "true"
+
 
         # File paths
         self.temp_dir = os.environ.get("TEMP_DIR", "/tmp/parakeet")
@@ -93,7 +103,10 @@ class Config:
             "chunk_duration": self.chunk_duration,
             "enable_diarization": self.enable_diarization,
             "include_diarization_in_text": self.include_diarization_in_text,
-            "has_hf_token": self.hf_token is not None
+            "has_hf_token": self.hf_token is not None,
+            "use_cuda_graph_decoder": self.use_cuda_graph_decoder,
+            "cudnn_benchmark": self.cudnn_benchmark,
+            "force_fp32": self.force_fp32,
         }
 
 

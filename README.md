@@ -1,11 +1,11 @@
 # Parakeet Whisper-Compatible API
 
-A simple FastAPI server that provides an OpenAI Whisper API-compatible endpoint backed by [NVIDIA's Parakeet-TDT model](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) for speech recognition + [Pyannote](https://github.com/pyannote/pyannote-audio) for speaker diarization.
+A simple FastAPI server that provides an OpenAI Whisper API-compatible endpoint backed by [NVIDIA's Parakeet-TDT model](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) for speech recognition + [Pyannote](https://github.com/pyannote/pyannote-audio) for speaker diarization.
 
 ## Features
 
 - Complete drop-in replacement for OpenAI's Whisper API
-- Uses [NVIDIA's Parakeet-TDT 0.6B V2 model](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) for high-quality transcription
+- Uses [NVIDIA's Parakeet-TDT 0.6B V2 model](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) for high-quality transcription
 - Supports all Whisper API response formats (json, text, srt, vtt, verbose_json)
 - Supports word-level and segment-level timestamps
 - Optional speaker diarization using [Pyannote.audio](https://github.com/pyannote/pyannote-audio)
@@ -83,6 +83,10 @@ Parameters:
 - `prompt`: Optional prompt to guide the transcription (ignored but accepted for compatibility)
 - `diarize`: Enable speaker diarization (defaults to true, requires HuggingFace token)
 - `include_diarization_in_text`: Include speaker labels in transcript text (defaults to true)
+- `chunk_duration`: Override audio chunk length in seconds for this request (falls back to `CHUNK_DURATION` env var, default 500)
+- `use_cuda_graph_decoder`: Toggle the NeMo RNNT/TDT greedy CUDA graph decoder (falls back to `USE_CUDA_GRAPH_DECODER` env var, default false). Disable if you hit `illegal memory access` crashes during transcription on bleeding-edge GPU stacks.
+- `force_fp32`: Disable autocast inside `model.transcribe()` to force FP32 (falls back to `FORCE_FP32` env var, default false)
+- `cudnn_benchmark`: Flip `torch.backends.cudnn.benchmark` (falls back to `CUDNN_BENCHMARK` env var, default false). Sticky — affects subsequent requests too.
 
 Example with curl:
 ```bash
@@ -134,7 +138,7 @@ The API supports multiple response formats:
   "task": "transcribe",
   "language": "en",
   "duration": 10.5,
-  "model": "parakeet-tdt-0.6b-v2",
+  "model": "parakeet-tdt-0.6b-v3",
   "segments": [
     {
       "id": 0,
@@ -248,14 +252,17 @@ Use the `run.sh` script to configure and start the server:
 **Environment Variables** (for settings not available as command line arguments):
 - `ENABLE_DIARIZATION`: Enable/disable diarization globally (default: true)
 - `INCLUDE_DIARIZATION_IN_TEXT`: Include speaker labels in text by default (default: true)
-- `MODEL_ID`: Parakeet model to use (default: nvidia/parakeet-tdt-0.6b-v2)
+- `MODEL_ID`: Parakeet model to use (default: nvidia/parakeet-tdt-0.6b-v3)
 - `TEMPERATURE`: Sampling temperature (default: 0.0)
 - `CHUNK_DURATION`: Audio chunk duration in seconds (default: 500)
 - `TEMP_DIR`: Temporary directory for audio processing (default: /tmp/parakeet)
+- `USE_CUDA_GRAPH_DECODER`: Enable NeMo's RNNT/TDT greedy CUDA graph decoder (default: false). Stream capture is unstable on some GPU + torch combinations and can cause `illegal memory access` crashes; keep off unless you know it works on your stack.
+- `CUDNN_BENCHMARK`: Set `torch.backends.cudnn.benchmark` (default: false)
+- `FORCE_FP32`: Disable autocast in `model.transcribe()` (default: false)
 
 ## Performance
 
-The [NVIDIA Parakeet-TDT model](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) offers:
+The [NVIDIA Parakeet-TDT model](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) offers:
 - Fast transcription (top model on the HF Open ASR leaderboard)
 - Support for punctuation and capitalization
 - High accuracy with word error rates as low as 1.69% on LibriSpeech test-clean
@@ -269,7 +276,7 @@ The [NVIDIA Parakeet-TDT model](https://huggingface.co/nvidia/parakeet-tdt-0.6b-
 
 This project builds upon excellent work by:
 
-- **NVIDIA NeMo Team**: For the outstanding [Parakeet-TDT model](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) that provides state-of-the-art speech recognition
+- **NVIDIA NeMo Team**: For the outstanding [Parakeet-TDT model](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) that provides state-of-the-art speech recognition
 - **Pyannote Team**: For the powerful [Pyannote.audio](https://github.com/pyannote/pyannote-audio) speaker diarization toolkit
 
 ## License
