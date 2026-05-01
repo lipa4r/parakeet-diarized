@@ -47,7 +47,7 @@ class Diarizer:
             # Initialize the pipeline
             self.pipeline = Pipeline.from_pretrained(
                 "pyannote/speaker-diarization-3.1",
-                use_auth_token=self.access_token
+                token=self.access_token
             )
 
             # Move to GPU if available
