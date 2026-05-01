@@ -133,6 +133,12 @@ def create_app() -> FastAPI:
                 logger.info("Performing speaker diarization")
                 diarization_result = diarizer.diarize(wav_file)
                 logger.info(f"Diarization found {diarization_result.num_speakers} speakers")
+                # Ensure all GPU work from diarization is finished before NeMo
+                # builds new graphs — avoids "CUDA driver error: device not ready"
+                # on the first transcription chunk.
+                if torch.cuda.is_available():
+                    torch.cuda.synchronize()
+                    torch.cuda.empty_cache()
 
             # Process each chunk
             all_text = []

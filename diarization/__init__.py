@@ -55,6 +55,9 @@ class Diarizer:
 
             # Move to GPU if available
             self.pipeline.to(torch.device(self.device))
+            # pyannote's reproducibility module disables TF32 on import — restore it
+            torch.backends.cuda.matmul.allow_tf32 = True
+            torch.backends.cudnn.allow_tf32 = True
             logger.info(f"Diarization pipeline initialized on {self.device}")
 
         except ImportError:
@@ -83,6 +86,11 @@ class Diarizer:
                 audio_path,
                 num_speakers=num_speakers
             )
+
+            # Newer pyannote returns DiarizeOutput(speaker_diarization, embeddings);
+            # older versions return Annotation directly.
+            if hasattr(diarization, "speaker_diarization"):
+                diarization = diarization.speaker_diarization
 
             # Convert to our format
             segments = []
