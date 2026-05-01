@@ -79,6 +79,7 @@ def create_app() -> FastAPI:
             asr_model = load_model(
                 model_id,
                 use_cuda_graph_decoder=config.use_cuda_graph_decoder,
+                beam_size=config.beam_size,
             )
             logger.info(f"Model {model_id} loaded successfully")
 
@@ -111,6 +112,7 @@ def create_app() -> FastAPI:
         use_cuda_graph_decoder: Optional[bool] = Form(None),
         force_fp32: Optional[bool] = Form(None),
         cudnn_benchmark: Optional[bool] = Form(None),
+        beam_size: Optional[int] = Form(None),
     ):
         """
         Transcribe audio file using the Parakeet-TDT model
@@ -139,10 +141,11 @@ def create_app() -> FastAPI:
             # Convert to WAV format
             wav_file = convert_audio_to_wav(str(temp_file))
 
-            # Resolve per-request stability flags (None -> fall back to config)
+            # Resolve per-request flags (None -> fall back to config)
             effective_chunk_duration = chunk_duration if chunk_duration is not None else config.chunk_duration
             effective_use_cuda_graph_decoder = use_cuda_graph_decoder if use_cuda_graph_decoder is not None else config.use_cuda_graph_decoder
             effective_force_fp32 = force_fp32 if force_fp32 is not None else config.force_fp32
+            effective_beam_size = beam_size if beam_size is not None else config.beam_size
             if cudnn_benchmark is not None:
                 # Sticky toggle — affects subsequent requests too
                 torch.backends.cudnn.benchmark = cudnn_benchmark
@@ -187,6 +190,7 @@ def create_app() -> FastAPI:
                     word_timestamps=word_timestamps,
                     force_fp32=effective_force_fp32,
                     use_cuda_graph_decoder=effective_use_cuda_graph_decoder,
+                    beam_size=effective_beam_size,
                 )
 
                 # Add offset to timestamps if not the first chunk

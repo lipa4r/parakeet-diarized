@@ -40,6 +40,9 @@ DEFAULT_USE_CUDA_GRAPH_DECODER = False  # NeMo RNNT/TDT greedy CUDA graph captur
 DEFAULT_CUDNN_BENCHMARK = False         # torch.backends.cudnn.benchmark
 DEFAULT_FORCE_FP32 = False              # disable autocast in model.transcribe()
 
+# Decoding quality
+DEFAULT_BEAM_SIZE = 1  # 1 = greedy (fast), >1 = beam search (better WER, slower)
+
 
 class Config:
     """Global configuration for Parakeet"""
@@ -76,6 +79,9 @@ class Config:
         self.cudnn_benchmark = os.environ.get("CUDNN_BENCHMARK", str(DEFAULT_CUDNN_BENCHMARK)).lower() == "true"
         self.force_fp32 = os.environ.get("FORCE_FP32", str(DEFAULT_FORCE_FP32)).lower() == "true"
 
+        # Decoding quality
+        self.beam_size = int(os.environ.get("BEAM_SIZE", DEFAULT_BEAM_SIZE))
+
 
         # File paths
         self.temp_dir = os.environ.get("TEMP_DIR", "/tmp/parakeet")
@@ -107,6 +113,7 @@ class Config:
             "use_cuda_graph_decoder": self.use_cuda_graph_decoder,
             "cudnn_benchmark": self.cudnn_benchmark,
             "force_fp32": self.force_fp32,
+            "beam_size": self.beam_size,
         }
 
 

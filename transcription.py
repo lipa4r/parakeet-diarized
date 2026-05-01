@@ -15,42 +15,61 @@ from models import WhisperSegment, TranscriptionResponse
 logger = logging.getLogger(__name__)
 
 
-def _apply_decoder_config(model, use_cuda_graph_decoder: bool) -> None:
+def _apply_decoder_config(model, use_cuda_graph_decoder: bool, beam_size: int = 1) -> None:
     """
-    Toggle the CUDA graph decoder on a NeMo RNNT/TDT model.
+    Apply decoding strategy to a NeMo RNNT/TDT model.
 
-    Idempotent — tracks the last applied value on the model and skips the
-    rebuild when nothing changed. Stream capture for greedy decoding is
-    unstable on bleeding-edge stacks (e.g. PyTorch 2.11 + CUDA 13 + Blackwell
-    sm_120) where it surfaces as intermittent "illegal memory access" crashes
-    in currentStreamCaptureStatusMayInitCtx.
+    Handles two orthogonal settings in one change_decoding_strategy call:
+    - beam_size > 1  → beam search (CUDA graph decoder disabled, incompatible)
+    - beam_size == 1 → greedy_batch + optional CUDA graph decoder
+
+    Idempotent — skips rebuild when nothing changed. CUDA graph capture is
+    unstable on bleeding-edge stacks (PyTorch 2.11 + CUDA 13 + Blackwell sm_120)
+    where it causes "illegal memory access" crashes.
     """
-    current = getattr(model, "_use_cuda_graph_decoder", None)
-    if current == use_cuda_graph_decoder:
+    current_graph = getattr(model, "_use_cuda_graph_decoder", None)
+    current_beam = getattr(model, "_beam_size", None)
+    if current_graph == use_cuda_graph_decoder and current_beam == beam_size:
         return
     try:
-        from omegaconf import open_dict
+        from omegaconf import open_dict, OmegaConf
         decoding_cfg = model.cfg.decoding
         with open_dict(decoding_cfg):
-            if "greedy" in decoding_cfg:
-                decoding_cfg.greedy.use_cuda_graph_decoder = use_cuda_graph_decoder
+            if beam_size > 1:
+                decoding_cfg.strategy = "beam"
+                if "beam" not in decoding_cfg:
+                    decoding_cfg.beam = OmegaConf.create({})
+                decoding_cfg.beam.beam_size = beam_size
+                # CUDA graph decoder is greedy-only; force off for beam search
+                if "greedy" in decoding_cfg:
+                    decoding_cfg.greedy.use_cuda_graph_decoder = False
+            else:
+                decoding_cfg.strategy = "greedy_batch"
+                if "greedy" in decoding_cfg:
+                    decoding_cfg.greedy.use_cuda_graph_decoder = use_cuda_graph_decoder
         model.change_decoding_strategy(decoding_cfg)
-        model._use_cuda_graph_decoder = use_cuda_graph_decoder
-        logger.info(f"CUDA graph decoder set to {use_cuda_graph_decoder}")
+        model._use_cuda_graph_decoder = use_cuda_graph_decoder if beam_size == 1 else False
+        model._beam_size = beam_size
+        if beam_size > 1:
+            logger.info(f"Decoder: beam search (beam_size={beam_size})")
+        else:
+            logger.info(f"Decoder: greedy, CUDA graph decoder={use_cuda_graph_decoder}")
     except Exception as e:
-        logger.warning(f"Could not change CUDA graph decoder: {e}")
+        logger.warning(f"Could not change decoder config: {e}")
 
 
 def load_model(model_id: str = "nvidia/parakeet-tdt-0.6b-v3",
-               use_cuda_graph_decoder: bool = False):
+               use_cuda_graph_decoder: bool = False,
+               beam_size: int = 1):
     """
     Load the ASR model (Parakeet-TDT)
 
     Args:
         model_id: The HuggingFace model ID to load
         use_cuda_graph_decoder: Enable NeMo's RNNT/TDT greedy CUDA graph
-            decoder. Defaults to False because stream capture is unstable
-            on some new GPU/torch combinations.
+            decoder. Ignored when beam_size > 1.
+        beam_size: Beam search width. 1 = greedy (fast), >1 = beam search
+            (better quality, slower).
 
     Returns:
         The loaded model
@@ -70,7 +89,7 @@ def load_model(model_id: str = "nvidia/parakeet-tdt-0.6b-v3",
         else:
             logger.warning("CUDA not available, running on CPU (will be slow)")
 
-        _apply_decoder_config(model, use_cuda_graph_decoder)
+        _apply_decoder_config(model, use_cuda_graph_decoder, beam_size)
 
         return model
     except Exception as e:
@@ -151,7 +170,8 @@ def format_vtt(segments: List[WhisperSegment]) -> str:
 def transcribe_audio_chunk(model, audio_path: str, language: Optional[str] = None,
                           word_timestamps: bool = False,
                           force_fp32: bool = False,
-                          use_cuda_graph_decoder: Optional[bool] = None) -> Tuple[str, List[WhisperSegment]]:
+                          use_cuda_graph_decoder: Optional[bool] = None,
+                          beam_size: Optional[int] = None) -> Tuple[str, List[WhisperSegment]]:
     """
     Transcribe a single audio chunk using the Parakeet-TDT model
 
@@ -161,15 +181,19 @@ def transcribe_audio_chunk(model, audio_path: str, language: Optional[str] = Non
         language: Optional language code
         word_timestamps: Whether to generate word-level timestamps
         force_fp32: Disable autocast inside model.transcribe() to force FP32
-        use_cuda_graph_decoder: When set, toggle the NeMo greedy CUDA graph
-            decoder for this call (idempotent — only rebuilds when value changed)
+        use_cuda_graph_decoder: Toggle the NeMo greedy CUDA graph decoder
+            (idempotent, ignored when beam_size > 1)
+        beam_size: Beam search width (1 = greedy, >1 = beam search).
+            Higher values improve quality at the cost of speed.
 
     Returns:
         Tuple of (transcription text, list of WhisperSegment objects)
     """
     try:
-        if use_cuda_graph_decoder is not None:
-            _apply_decoder_config(model, use_cuda_graph_decoder)
+        if use_cuda_graph_decoder is not None or beam_size is not None:
+            effective_graph = use_cuda_graph_decoder if use_cuda_graph_decoder is not None else getattr(model, "_use_cuda_graph_decoder", False)
+            effective_beam = beam_size if beam_size is not None else getattr(model, "_beam_size", 1)
+            _apply_decoder_config(model, effective_graph, effective_beam)
 
         if force_fp32 and torch.cuda.is_available():
             autocast_ctx = torch.amp.autocast("cuda", enabled=False)
