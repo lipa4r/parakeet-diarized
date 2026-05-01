@@ -44,6 +44,20 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    @app.on_event("shutdown")
+    async def shutdown_event():
+        """Release model and GPU memory on shutdown to avoid semaphore leaks"""
+        global asr_model
+        import gc
+        if asr_model is not None:
+            del asr_model
+            asr_model = None
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+            torch.cuda.empty_cache()
+        gc.collect()
+        logger.info("Model released, GPU memory cleared")
+
     @app.on_event("startup")
     async def startup_event():
         """Initialize resources during startup"""

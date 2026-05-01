@@ -178,10 +178,13 @@ def transcribe_audio_chunk(model, audio_path: str, language: Optional[str] = Non
 
         # Use the NeMo model to transcribe audio
         with torch.no_grad(), autocast_ctx:
-            # Simply pass the audio path(s) as a list to the transcribe method
+            # num_workers=0 keeps DataLoader in the main process — prevents
+            # spawned child processes from holding semaphores that trigger
+            # resource_tracker "leaked semaphore" warnings on shutdown.
             transcription = model.transcribe(
                 [audio_path],
-                timestamps=True  # Always request timestamps for segmentation
+                timestamps=True,
+                num_workers=0,
             )
 
         # Extract the text from the result
