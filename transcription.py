@@ -36,7 +36,7 @@ def _apply_decoder_config(model, use_cuda_graph_decoder: bool, beam_size: int = 
         decoding_cfg = model.cfg.decoding
         with open_dict(decoding_cfg):
             if beam_size > 1:
-                decoding_cfg.strategy = "beam"
+                decoding_cfg.strategy = "malsd_batch"  # NeMo-recommended beam strategy
                 if "beam" not in decoding_cfg:
                     decoding_cfg.beam = OmegaConf.create({})
                 decoding_cfg.beam.beam_size = beam_size
@@ -222,9 +222,10 @@ def transcribe_audio_chunk(model, audio_path: str, language: Optional[str] = Non
         # Create segments from the timestamp information if available
         segments = []
 
-        # Check if we have timestamp information
-        if hasattr(result, 'timestamp') and 'segment' in result.timestamp:
-            for i, stamp in enumerate(result.timestamp['segment']):
+        # Beam search (malsd_batch) may return result.timestamp=None; guard all access
+        ts = getattr(result, 'timestamp', None)
+        if ts is not None and isinstance(ts, dict) and ts.get('segment'):
+            for i, stamp in enumerate(ts['segment']):
                 segments.append(WhisperSegment(
                     id=i,
                     start=stamp['start'],
@@ -232,11 +233,10 @@ def transcribe_audio_chunk(model, audio_path: str, language: Optional[str] = Non
                     text=stamp['segment']
                 ))
         else:
-            # If no segments available, create a single segment for the entire chunk
             segments.append(WhisperSegment(
                 id=0,
                 start=0.0,
-                end=len(text.split()) / 2.0,  # Rough estimate based on word count
+                end=len(text.split()) / 2.0,
                 text=text
             ))
 
