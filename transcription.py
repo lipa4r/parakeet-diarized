@@ -38,6 +38,23 @@ def load_model(model_id: str = "nvidia/parakeet-tdt-0.6b-v3"):
         else:
             logger.warning("CUDA not available, running on CPU (will be slow)")
 
+        # Disable CUDA graphs in the RNNT/TDT greedy decoder.
+        # Stream capture is unstable on bleeding-edge stacks (e.g. PyTorch 2.11
+        # + CUDA 13 + Blackwell sm_120), surfacing as intermittent
+        # "illegal memory access" crashes inside currentStreamCaptureStatusMayInitCtx.
+        try:
+            from omegaconf import open_dict
+            decoding_cfg = model.cfg.decoding
+            with open_dict(decoding_cfg):
+                if "greedy" in decoding_cfg:
+                    decoding_cfg.greedy.use_cuda_graph_decoder = False
+                if "loop_labels" in decoding_cfg.get("greedy", {}):
+                    decoding_cfg.greedy.loop_labels = False
+            model.change_decoding_strategy(decoding_cfg)
+            logger.info("Disabled CUDA graph decoder for RNNT/TDT greedy decoding")
+        except Exception as e:
+            logger.warning(f"Could not disable CUDA graph decoder: {e}")
+
         return model
     except Exception as e:
         logger.error(f"Error loading model: {str(e)}")
