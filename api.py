@@ -187,9 +187,9 @@ def create_app() -> FastAPI:
                     # Process segments to include speaker info in the text field
                     for segment in all_segments:
                         if hasattr(segment, 'speaker') and segment.speaker:
-                            # Extract speaker number (e.g., 'speaker_SPEAKER_00' -> '1')
+                            # Extract speaker number (e.g., 'SPEAKER_00' -> '1')
                             speaker_label = segment.speaker
-                            if speaker_label.startswith("speaker_"):
+                            if speaker_label.startswith("SPEAKER_"):
                                 try:
                                     # Extract speaker number from the label
                                     parts = speaker_label.split("_")

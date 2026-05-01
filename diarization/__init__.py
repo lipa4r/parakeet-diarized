@@ -5,11 +5,20 @@ from typing import Dict, List, Optional, Tuple, Union
 import os
 import logging
 import tempfile
+import warnings
 import numpy as np
 import torch
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
+
+# Silence pyannote's ReproducibilityWarning — we explicitly want TF32 on for speed
+# and re-enable it after Pipeline.from_pretrained() flips it back off.
+warnings.filterwarnings(
+    "ignore",
+    message=".*TensorFloat-32.*has been disabled.*",
+)
+
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -108,7 +117,7 @@ class Diarizer:
                 segments.append(SpeakerSegment(
                     start=turn.start,
                     end=turn.end,
-                    speaker=f"speaker_{speaker_id}"
+                    speaker=speaker_id
                 ))
                 speakers.add(speaker_id)
 
