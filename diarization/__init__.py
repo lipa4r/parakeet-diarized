@@ -7,6 +7,9 @@ import logging
 import tempfile
 import numpy as np
 import torch
+
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.allow_tf32 = True
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)

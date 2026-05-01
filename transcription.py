@@ -4,6 +4,9 @@ import tempfile
 from typing import List, Optional, Dict, Any, Union, Tuple
 
 import torch
+
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.allow_tf32 = True
 import numpy as np
 
 from models import WhisperSegment, TranscriptionResponse

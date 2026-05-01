@@ -8,6 +8,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 import torch
 
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.allow_tf32 = True
+
 from models import WhisperSegment, TranscriptionResponse, ModelInfo, ModelList
 from audio import convert_audio_to_wav, split_audio_into_chunks
 from transcription import load_model, format_srt, format_vtt, transcribe_audio_chunk
