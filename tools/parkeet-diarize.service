@@ -1,0 +1,91 @@
+# parkeet-diarize.service — systemd unit for Parakeet Diarized ASR API
+#
+# INSTALLATION
+# ────────────────────────────────────────────────────────────────────────────
+# 1. Adjust User=, Group= and WorkingDirectory= below to match your setup.
+#
+# 2. Copy the unit file:
+#    sudo cp tools/parkeet-diarize.service /etc/systemd/system/parkeet-diarize.service
+#
+# 3. Create the config directory and environment file:
+#    sudo mkdir -p /etc/parakeet-diarize
+#    sudo cp tools/parkeet-diarize.env.example /etc/parakeet-diarize/config.env
+#    sudo nano /etc/parakeet-diarize/config.env   # set HUGGINGFACE_ACCESS_TOKEN at minimum
+#    sudo chmod 600 /etc/parakeet-diarize/config.env
+#
+# 4. Enable and start:
+#    sudo systemctl daemon-reload
+#    sudo systemctl enable --now parkeet-diarize.service
+#
+# USEFUL COMMANDS
+# ────────────────────────────────────────────────────────────────────────────
+#    sudo systemctl status  parkeet-diarize
+#    sudo journalctl -u parkeet-diarize -f
+#    sudo systemctl restart parkeet-diarize
+#    sudo systemctl stop    parkeet-diarize
+
+[Unit]
+Description=Parakeet Diarized — speech-to-text API with speaker diarization
+Documentation=https://github.com/lipa4r/parakeet-diarized
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+
+# ── User / paths ─────────────────────────────────────────────────────────────
+# Change User/Group to the account that owns the application.
+# The user must have read access to /dev/nvidia* for GPU inference.
+User=YOUR_USER
+Group=YOUR_GROUP
+WorkingDirectory=/opt/parakeet-diarized
+
+# ── Default runtime parameters ───────────────────────────────────────────────
+# These are overridden by matching keys in the EnvironmentFile below.
+Environment=HOST=0.0.0.0
+Environment=PORT=8000
+Environment=WORKERS=1
+Environment=TEMP_DIR=/tmp/parakeet
+
+# ── User overrides ───────────────────────────────────────────────────────────
+# The leading dash means systemd will not fail if the file does not exist.
+# Copy tools/parkeet-diarize.env.example to this path and edit it.
+EnvironmentFile=-/etc/parakeet-diarize/config.env
+
+# ── Server command ───────────────────────────────────────────────────────────
+# Calls the venv's uvicorn directly — no bash wrapper needed under systemd.
+# WORKERS > 1 runs multiple processes (each loads the model separately,
+# multiplying VRAM usage); useful only when serving many concurrent clients.
+ExecStart=/opt/parakeet-diarized/venv/bin/uvicorn main:app \
+    --host ${HOST} \
+    --port ${PORT} \
+    --workers ${WORKERS} \
+    --timeout-graceful-shutdown 30
+
+# ── Restart policy ───────────────────────────────────────────────────────────
+Restart=always
+RestartSec=5s
+# Allow at most 5 rapid restarts in 60 s before systemd gives up
+StartLimitIntervalSec=60s
+StartLimitBurst=5
+
+# ── Timeouts ─────────────────────────────────────────────────────────────────
+# NeMo + pyannote model loading can exceed 60 s on a cold HF model cache.
+TimeoutStartSec=180s
+# Give uvicorn time to finish in-flight requests before the process is killed.
+TimeoutStopSec=60s
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=parkeet-diarize
+
+# ── Security hardening ───────────────────────────────────────────────────────
+# Prevent the process from gaining new privileges via setuid/capabilities.
+NoNewPrivileges=true
+# Give the service its own private /tmp — TEMP_DIR=/tmp/parakeet will live
+# inside this private namespace, isolated from other services.
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
