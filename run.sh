@@ -20,7 +20,6 @@ FORCE_FP32=0
 CHUNK_DURATION_ARG=""
 CPU_THREADS=""
 WORKERS=1
-BEAM_SIZE_ARG=""
 
 # Process command line arguments
 while [[ $# -gt 0 ]]; do
@@ -58,10 +57,6 @@ while [[ $# -gt 0 ]]; do
             FORCE_FP32=1
             shift
             ;;
-        --beam-size)
-            BEAM_SIZE_ARG="$2"
-            shift 2
-            ;;
         --chunk-duration)
             CHUNK_DURATION_ARG="$2"
             shift 2
@@ -86,7 +81,6 @@ while [[ $# -gt 0 ]]; do
             echo -e "  --cuda-graph-decoder       Enable NeMo CUDA graph decoder (default: off, unstable on sm_120)"
             echo -e "  --cudnn-benchmark          Enable torch.backends.cudnn.benchmark (default: off)"
             echo -e "  --force-fp32               Force FP32 inference, disable autocast (default: off)"
-            echo -e "  --beam-size N              Beam search width: 1=greedy/fast (default), >1=better WER/slower"
             echo -e "  --chunk-duration SEC       Audio chunk duration in seconds (default: 500)"
             echo -e "  --cpu-threads N            Limit CPU threads for PyTorch/OpenMP/MKL (OMP_NUM_THREADS)"
             echo -e "  --workers N                Number of uvicorn worker processes (default: 1)."
@@ -169,11 +163,6 @@ fi
 if [[ $FORCE_FP32 -eq 1 ]]; then
     echo -e "${YELLOW}Forcing FP32 inference (autocast disabled).${NC}"
     export FORCE_FP32=true
-fi
-
-if [[ -n "$BEAM_SIZE_ARG" ]]; then
-    echo -e "${BLUE}Beam size: ${BEAM_SIZE_ARG}${NC}"
-    export BEAM_SIZE="$BEAM_SIZE_ARG"
 fi
 
 if [[ -n "$CHUNK_DURATION_ARG" ]]; then

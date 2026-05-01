@@ -32,7 +32,6 @@ FastAPI serwer transkrypcji audio zgodny z API OpenAI Whisper (`/v1/audio/transc
 | `USE_CUDA_GRAPH_DECODER` | Włącz CUDA graph decoder w NeMo (RNNT/TDT greedy) | `false` |
 | `CUDNN_BENCHMARK` | `torch.backends.cudnn.benchmark` | `false` |
 | `FORCE_FP32` | Wyłącz autocast w `model.transcribe()` (FP32) | `false` |
-| `BEAM_SIZE` | Szerokość wiązki dekodowania: 1=greedy (szybko), >1=beam search (lepszy WER, wolniej) | `1` |
 
 ### Parametry endpointu (Form, override per request)
 
@@ -44,7 +43,6 @@ Wszystkie opcjonalne — `None` oznacza użycie wartości z configu.
 | `use_cuda_graph_decoder` | Toggle CUDA graph decodera (idempotent, `change_decoding_strategy`) |
 | `force_fp32` | FP32 dla tej transkrypcji (`autocast(enabled=False)`) |
 | `cudnn_benchmark` | Globalny flag torch — uwaga: sticky, wpływa na kolejne requesty |
-| `beam_size` | Szerokość wiązki: 1=greedy, >1=beam search (wyłącza CUDA graph decoder automatycznie) |
 
 ## Kluczowe pliki
 

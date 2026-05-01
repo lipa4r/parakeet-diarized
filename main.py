@@ -1,7 +1,18 @@
 import os
+import warnings
 import logging
 import uvicorn
 import torch
+
+# NeMo's DataLoader (even with num_workers=0) may leave one semaphore at Python
+# exit — harmless in a container/systemd environment where the OS reclaims all
+# IPC resources when the process dies.  Suppress the noisy resource_tracker
+# warning so it doesn't pollute Docker/journald logs.
+warnings.filterwarnings(
+    "ignore",
+    message="resource_tracker: There appear to be",
+    category=UserWarning,
+)
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True

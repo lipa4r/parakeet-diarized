@@ -87,7 +87,6 @@ Parameters:
 - `use_cuda_graph_decoder`: Toggle the NeMo RNNT/TDT greedy CUDA graph decoder (falls back to `USE_CUDA_GRAPH_DECODER` env var, default false). Disable if you hit `illegal memory access` crashes during transcription on bleeding-edge GPU stacks.
 - `force_fp32`: Disable autocast inside `model.transcribe()` to force FP32 (falls back to `FORCE_FP32` env var, default false)
 - `cudnn_benchmark`: Flip `torch.backends.cudnn.benchmark` (falls back to `CUDNN_BENCHMARK` env var, default false). Sticky — affects subsequent requests too.
-- `beam_size`: Beam search width (falls back to `BEAM_SIZE` env var, default 1). `1` = greedy decoding (fast), higher values (e.g. 4–8) use beam search for better transcription quality at the cost of speed. Values >1 automatically disable the CUDA graph decoder.
 
 Example with curl:
 ```bash
@@ -260,7 +259,6 @@ Use the `run.sh` script to configure and start the server:
 - `USE_CUDA_GRAPH_DECODER`: Enable NeMo's RNNT/TDT greedy CUDA graph decoder (default: false). Stream capture is unstable on some GPU + torch combinations and can cause `illegal memory access` crashes; keep off unless you know it works on your stack.
 - `CUDNN_BENCHMARK`: Set `torch.backends.cudnn.benchmark` (default: false)
 - `FORCE_FP32`: Disable autocast in `model.transcribe()` (default: false)
-- `BEAM_SIZE`: Beam search width for decoding (default: 1 = greedy). Set to 4–8 for better transcription quality at the cost of speed. Values >1 disable the CUDA graph decoder.
 
 ## Performance
 
