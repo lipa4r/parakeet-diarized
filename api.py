@@ -1,11 +1,11 @@
 import gc
 import os
 import logging
-import shutil
-from typing import List, Optional, Dict, Any, Union
+import re
+from typing import Annotated, List, Literal, Optional
 from pathlib import Path
 
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 import torch
@@ -26,6 +26,59 @@ asr_model = None
 diarizer = None
 
 config = get_config()
+
+# Audio file extensions accepted by ffmpeg / the conversion pipeline
+_ALLOWED_AUDIO_EXTENSIONS = frozenset({
+    ".wav", ".mp3", ".mp4", ".m4a", ".ogg", ".flac",
+    ".webm", ".aac", ".opus", ".wma", ".aiff", ".aif",
+})
+
+# language codes: ISO 639-1 (2 chars), ISO 639-2 (3 chars), or full name
+_LANGUAGE_RE = re.compile(r"^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{2,8})?$|^[a-zA-Z]{4,64}$")
+
+
+def _validate_request_file(file: UploadFile) -> None:
+    filename = file.filename or ""
+    if not filename:
+        raise HTTPException(status_code=400, detail="Uploaded file has no filename.")
+    ext = Path(filename).suffix.lower()
+    if not ext:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot determine file type from filename {filename!r}. "
+                   f"Supported extensions: {', '.join(sorted(_ALLOWED_AUDIO_EXTENSIONS))}",
+        )
+    if ext not in _ALLOWED_AUDIO_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type {ext!r}. "
+                   f"Supported: {', '.join(sorted(_ALLOWED_AUDIO_EXTENSIONS))}",
+        )
+
+
+def _validate_request_overrides(
+    chunk_duration: Optional[int],
+    language: Optional[str],
+) -> None:
+    errors: list[str] = []
+
+    if chunk_duration is not None and not (1 <= chunk_duration <= 7200):
+        errors.append(f"chunk_duration must be 1–7200 seconds (got {chunk_duration})")
+
+    if language is not None:
+        lang = language.strip()
+        if not lang:
+            errors.append("language must not be blank")
+        elif not _LANGUAGE_RE.match(lang):
+            errors.append(
+                f"language must be a valid language code (e.g. 'en', 'pl', 'english'), got {language!r}"
+            )
+
+    if errors:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid request parameters: " + "; ".join(errors),
+        )
 
 
 def create_app() -> FastAPI:
@@ -70,7 +123,6 @@ def create_app() -> FastAPI:
 
         except Exception as e:
             logger.error(f"Failed to load ASR model: {e}")
-            # Keep asr_model=None; /health will report not ready
 
         try:
             hf_token = config.get_hf_token()
@@ -81,7 +133,6 @@ def create_app() -> FastAPI:
                 logger.info("No HuggingFace token — diarization disabled")
         except Exception as e:
             logger.error(f"Failed to load diarization pipeline: {e}")
-            # Keep diarizer=None; requests will proceed without diarization
 
     @app.on_event("shutdown")
     async def shutdown_event():
@@ -111,8 +162,8 @@ def create_app() -> FastAPI:
         model: str = Form("whisper-1"),
         language: Optional[str] = Form(None),
         prompt: Optional[str] = Form(None),
-        response_format: str = Form("json"),
-        temperature: float = Form(0.0),
+        response_format: Literal["json", "text", "srt", "vtt", "verbose_json"] = Form("json"),
+        temperature: Annotated[float, Form(ge=0.0, le=1.0)] = 0.0,
         timestamps: bool = Form(False),
         timestamp_granularities: Optional[List[str]] = Form(None),
         vad_filter: bool = Form(False),
@@ -130,11 +181,18 @@ def create_app() -> FastAPI:
         if asr_model is None:
             raise HTTPException(status_code=503, detail="Model not loaded yet. Please try again in a few moments.")
 
+        # ── Input validation ──────────────────────────────────────────────────
+        _validate_request_file(file)
+        _validate_request_overrides(chunk_duration, language)
+
         logger.info(f"Transcription requested: {file.filename}, format: {response_format}")
 
         # Resolve per-request flags (None → fall back to config)
         effective_chunk_duration = chunk_duration if chunk_duration is not None else config.chunk_duration
-        effective_use_cuda_graph_decoder = use_cuda_graph_decoder if use_cuda_graph_decoder is not None else config.use_cuda_graph_decoder
+        effective_use_cuda_graph_decoder = (
+            use_cuda_graph_decoder if use_cuda_graph_decoder is not None
+            else config.use_cuda_graph_decoder
+        )
         effective_force_fp32 = force_fp32 if force_fp32 is not None else config.force_fp32
         if cudnn_benchmark is not None:
             # Sticky — affects subsequent requests too
@@ -246,10 +304,8 @@ def create_app() -> FastAPI:
                 return PlainTextResponse(format_srt(all_segments))
             elif response_format == "vtt":
                 return PlainTextResponse(format_vtt(all_segments))
-            elif response_format == "verbose_json":
+            else:  # verbose_json
                 return response.dict()
-            else:
-                raise HTTPException(status_code=400, detail=f"Unsupported response format: {response_format}")
 
         except HTTPException:
             raise
