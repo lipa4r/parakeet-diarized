@@ -32,6 +32,9 @@ FastAPI serwer transkrypcji audio zgodny z API OpenAI Whisper (`/v1/audio/transc
 | `USE_CUDA_GRAPH_DECODER` | Włącz CUDA graph decoder w NeMo (RNNT/TDT greedy) | `false` |
 | `CUDNN_BENCHMARK` | `torch.backends.cudnn.benchmark` | `false` |
 | `FORCE_FP32` | Wyłącz autocast w `model.transcribe()` (FP32) | `false` |
+| `USE_BF16` | BF16 autocast w `model.transcribe()` — zalecane na RTX 4070/5070 | `false` |
+| `AUTO_ATTENTION` | Automatyczne przełączanie uwagi enkodera wg długości audio | `false` |
+| `LOCAL_ATTENTION_THRESHOLD` | Próg długości audio (s) do przełączenia na lokalną uwagę | `60` |
 
 ### Parametry endpointu (Form, override per request)
 
@@ -42,7 +45,10 @@ Wszystkie opcjonalne — `None` oznacza użycie wartości z configu.
 | `chunk_duration` | Długość fragmentu audio (s) na ten request |
 | `use_cuda_graph_decoder` | Toggle CUDA graph decodera (idempotent, `change_decoding_strategy`) |
 | `force_fp32` | FP32 dla tej transkrypcji (`autocast(enabled=False)`) |
+| `use_bf16` | BF16 autocast dla tej transkrypcji; wyklucza się z `force_fp32` |
 | `cudnn_benchmark` | Globalny flag torch — uwaga: sticky, wpływa na kolejne requesty |
+| `auto_attention` | Lokalny override `AUTO_ATTENTION`; `true` = uwaga zależy od długości audio |
+| `vad_filter` | Pomija ciche chunki (RMS < −50 dBFS) bez modyfikacji audio |
 
 ## Kluczowe pliki
 
@@ -60,11 +66,14 @@ models.py          — modele Pydantic (WhisperSegment, TranscriptionResponse)
 
 ```
 Plik audio
-  → convert_audio_to_wav()         # ffmpeg → 16kHz mono WAV
-  → split_audio_into_chunks()      # podział na fragmenty (domyślnie 500s)
-  ├─ diarizer.diarize()            # pyannote na pełnym pliku
-  └─ transcribe_audio_chunk()      # NeMo na każdym fragmencie
-  → diarizer.merge_with_transcription()  # połączenie po nakładaniu się czasu
+  → convert_audio_to_wav()              # ffmpeg → 16kHz mono WAV
+  → get_audio_duration()                # odczyt długości (do decyzji o uwadze)
+  → apply_attention_model()             # rel_pos / rel_pos_local_attn [256,256]
+  → split_audio_into_chunks()           # podział na fragmenty (domyślnie 500s)
+  ├─ [vad_filter] is_silent_chunk()     # pomijanie cichych fragmentów
+  ├─ diarizer.diarize()                 # pyannote na pełnym pliku
+  └─ transcribe_audio_chunk()           # NeMo na każdym aktywnym fragmencie
+  → diarizer.merge_with_transcription() # połączenie po nakładaniu się czasu
   → format odpowiedzi (json/srt/vtt/...)
 ```
 

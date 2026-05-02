@@ -5,10 +5,13 @@ A simple FastAPI server that provides an OpenAI Whisper API-compatible endpoint 
 ## Features
 
 - Complete drop-in replacement for OpenAI's Whisper API
-- Uses [NVIDIA's Parakeet-TDT 0.6B V2 model](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) for high-quality transcription
+- Uses [NVIDIA's Parakeet-TDT 0.6B v3 model](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) for high-quality transcription
 - Supports all Whisper API response formats (json, text, srt, vtt, verbose_json)
 - Supports word-level and segment-level timestamps
 - Optional speaker diarization using [Pyannote.audio](https://github.com/pyannote/pyannote-audio)
+- Automatic encoder attention switching for long audio (local attention reduces O(n²) → O(n))
+- BF16 inference support — recommended on RTX 4070 / 5070 (Ada/Blackwell)
+- VAD silence filtering — skips silent chunks without breaking timestamps
 - FastAPI-based server with automatic OpenAPI documentation
 
 ## Requirements
@@ -79,14 +82,16 @@ Parameters:
 - `timestamps`: Whether to include timestamps (defaults to false)
 - `timestamp_granularities`: Timestamp detail level (accepts "segment")
 - `temperature`: Temperature for sampling (defaults to 0.0)
-- `vad_filter`: Voice activity detection filter (defaults to false)
+- `vad_filter`: Skip silent audio chunks before transcription (defaults to false). Uses RMS energy detection — does not modify audio, so timestamps remain correct.
 - `prompt`: Optional prompt to guide the transcription (ignored but accepted for compatibility)
 - `diarize`: Enable speaker diarization (defaults to true, requires HuggingFace token)
 - `include_diarization_in_text`: Include speaker labels in transcript text (defaults to true)
 - `chunk_duration`: Override audio chunk length in seconds for this request (falls back to `CHUNK_DURATION` env var, default 500)
 - `use_cuda_graph_decoder`: Toggle the NeMo RNNT/TDT greedy CUDA graph decoder (falls back to `USE_CUDA_GRAPH_DECODER` env var, default false). Disable if you hit `illegal memory access` crashes during transcription on bleeding-edge GPU stacks.
 - `force_fp32`: Disable autocast inside `model.transcribe()` to force FP32 (falls back to `FORCE_FP32` env var, default false)
+- `use_bf16`: Use BF16 autocast inside `model.transcribe()` (falls back to `USE_BF16` env var, default false). Recommended on RTX 4070/5070 — better numerical stability than FP16 at equal throughput. Mutually exclusive with `force_fp32`.
 - `cudnn_benchmark`: Flip `torch.backends.cudnn.benchmark` (falls back to `CUDNN_BENCHMARK` env var, default false). Sticky — affects subsequent requests too.
+- `auto_attention`: Automatically switch encoder attention based on audio length (falls back to `AUTO_ATTENTION` env var, default false). When enabled, uses local attention (`rel_pos_local_attn`, ±20 s context) for audio longer than `LOCAL_ATTENTION_THRESHOLD` seconds, reducing computation from O(n²) to O(n). Reverts to global attention for short files.
 
 Example with curl:
 ```bash
@@ -250,15 +255,22 @@ Use the `run.sh` script to configure and start the server:
 ```
 
 **Environment Variables** (for settings not available as command line arguments):
-- `ENABLE_DIARIZATION`: Enable/disable diarization globally (default: true)
-- `INCLUDE_DIARIZATION_IN_TEXT`: Include speaker labels in text by default (default: true)
-- `MODEL_ID`: Parakeet model to use (default: nvidia/parakeet-tdt-0.6b-v3)
-- `TEMPERATURE`: Sampling temperature (default: 0.0)
-- `CHUNK_DURATION`: Audio chunk duration in seconds (default: 500)
-- `TEMP_DIR`: Temporary directory for audio processing (default: /tmp/parakeet)
-- `USE_CUDA_GRAPH_DECODER`: Enable NeMo's RNNT/TDT greedy CUDA graph decoder (default: false). Stream capture is unstable on some GPU + torch combinations and can cause `illegal memory access` crashes; keep off unless you know it works on your stack.
-- `CUDNN_BENCHMARK`: Set `torch.backends.cudnn.benchmark` (default: false)
-- `FORCE_FP32`: Disable autocast in `model.transcribe()` (default: false)
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `MODEL_ID` | NeMo/HuggingFace model ID | `nvidia/parakeet-tdt-0.6b-v3` |
+| `HUGGINGFACE_ACCESS_TOKEN` | HF token (required for diarization) | — |
+| `ENABLE_DIARIZATION` | Enable diarization globally | `true` |
+| `INCLUDE_DIARIZATION_IN_TEXT` | Include speaker labels in transcript text | `true` |
+| `CHUNK_DURATION` | Audio chunk length in seconds | `500` |
+| `PORT` | Server port | `8000` |
+| `TEMP_DIR` | Temporary directory for audio files | `/tmp/parakeet` |
+| `USE_CUDA_GRAPH_DECODER` | NeMo RNNT/TDT greedy CUDA graph decoder — unstable on some stacks | `false` |
+| `CUDNN_BENCHMARK` | `torch.backends.cudnn.benchmark` | `false` |
+| `FORCE_FP32` | Disable autocast in `model.transcribe()` | `false` |
+| `USE_BF16` | BF16 autocast in `model.transcribe()` — recommended on RTX 4070/5070 | `false` |
+| `AUTO_ATTENTION` | Auto-switch encoder attention based on audio length | `false` |
+| `LOCAL_ATTENTION_THRESHOLD` | Duration threshold (s) for switching to local attention | `60` |
 
 ## Performance
 
