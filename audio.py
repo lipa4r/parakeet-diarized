@@ -7,7 +7,32 @@ import wave
 from typing import List, Optional, Dict, Any, Union
 from pathlib import Path
 
+import numpy as np
+
 logger = logging.getLogger(__name__)
+
+
+def get_audio_duration(audio_path: str) -> float:
+    """Return duration of a 16-bit PCM WAV file in seconds."""
+    with wave.open(audio_path, 'rb') as wf:
+        return wf.getnframes() / wf.getframerate()
+
+
+def is_silent_chunk(audio_path: str, silence_threshold_db: float = -50.0) -> bool:
+    """Return True if the chunk's RMS level is below silence_threshold_db (dBFS)."""
+    try:
+        with wave.open(audio_path, 'rb') as wf:
+            frames = wf.readframes(wf.getnframes())
+        samples = np.frombuffer(frames, dtype=np.int16).astype(np.float32)
+        if samples.size == 0:
+            return True
+        rms = float(np.sqrt(np.mean(samples ** 2)))
+        if rms <= 0:
+            return True
+        return 20.0 * np.log10(rms / 32768.0) < silence_threshold_db
+    except Exception as e:
+        logger.warning(f"Could not check silence for {audio_path}: {e}")
+        return False
 
 def split_audio_into_chunks(audio_path: str, chunk_duration: int = 300) -> List[str]:
     """

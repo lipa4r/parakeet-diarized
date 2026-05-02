@@ -14,8 +14,8 @@ torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 
 from models import WhisperSegment, TranscriptionResponse, ModelInfo, ModelList
-from audio import convert_audio_to_wav, split_audio_into_chunks
-from transcription import load_model, format_srt, format_vtt, transcribe_audio_chunk
+from audio import convert_audio_to_wav, split_audio_into_chunks, get_audio_duration, is_silent_chunk
+from transcription import load_model, format_srt, format_vtt, transcribe_audio_chunk, apply_attention_model
 from diarization import Diarizer
 from config import get_config
 
@@ -173,7 +173,9 @@ def create_app() -> FastAPI:
         chunk_duration: Optional[int] = Form(None),
         use_cuda_graph_decoder: Optional[bool] = Form(None),
         force_fp32: Optional[bool] = Form(None),
+        use_bf16: Optional[bool] = Form(None),
         cudnn_benchmark: Optional[bool] = Form(None),
+        auto_attention: Optional[bool] = Form(None),
     ):
         """Transcribe audio — compatible with the OpenAI Whisper API"""
         global asr_model, diarizer
@@ -194,6 +196,8 @@ def create_app() -> FastAPI:
             else config.use_cuda_graph_decoder
         )
         effective_force_fp32 = force_fp32 if force_fp32 is not None else config.force_fp32
+        effective_use_bf16 = use_bf16 if use_bf16 is not None else config.use_bf16
+        effective_auto_attention = auto_attention if auto_attention is not None else config.auto_attention
         if cudnn_benchmark is not None:
             # Sticky — affects subsequent requests too
             torch.backends.cudnn.benchmark = cudnn_benchmark
@@ -211,7 +215,19 @@ def create_app() -> FastAPI:
                 f.write(await file.read())
 
             wav_file = convert_audio_to_wav(str(temp_file))
+            audio_duration = get_audio_duration(wav_file)
             audio_chunks = split_audio_into_chunks(wav_file, chunk_duration=effective_chunk_duration)
+
+            # Switch encoder attention based on audio duration (idempotent).
+            # auto=False always restores global attention; auto=True switches to
+            # local attention (rel_pos_local_attn, [256,256]) when duration exceeds
+            # the threshold, reducing attention cost from O(n²) to O(n).
+            apply_attention_model(
+                asr_model,
+                audio_duration_s=audio_duration,
+                threshold_s=config.local_attention_threshold,
+                auto=effective_auto_attention,
+            )
 
             # Diarization (uses the global singleton loaded at startup)
             active_diarizer = diarizer if diarize else None
@@ -226,21 +242,35 @@ def create_app() -> FastAPI:
             elif diarize and diarizer is None:
                 logger.warning("Diarization requested but pipeline not available (no HF token or load failed)")
 
-            # Transcribe all chunks
+            # VAD: skip chunks whose RMS is below the silence threshold.
+            # Indices are preserved so timestamp offsets remain correct.
+            if vad_filter:
+                active_pairs = [
+                    (i, p) for i, p in enumerate(audio_chunks)
+                    if not is_silent_chunk(p)
+                ]
+                skipped = len(audio_chunks) - len(active_pairs)
+                if skipped:
+                    logger.info(f"VAD: skipped {skipped} silent chunk(s) out of {len(audio_chunks)}")
+            else:
+                active_pairs = list(enumerate(audio_chunks))
+
+            # Transcribe active chunks
             all_text = []
             all_segments = []
-            for i, chunk_path in enumerate(audio_chunks):
-                logger.info(f"Processing chunk {i+1}/{len(audio_chunks)}")
+            for i, (orig_idx, chunk_path) in enumerate(active_pairs):
+                logger.info(f"Processing chunk {i+1}/{len(active_pairs)}")
                 chunk_text, chunk_segments = transcribe_audio_chunk(
                     asr_model,
                     chunk_path,
                     language=language,
                     word_timestamps=word_timestamps,
                     force_fp32=effective_force_fp32,
+                    use_bf16=effective_use_bf16,
                     use_cuda_graph_decoder=effective_use_cuda_graph_decoder,
                 )
-                if i > 0:
-                    offset = i * effective_chunk_duration
+                if orig_idx > 0:
+                    offset = orig_idx * effective_chunk_duration
                     for seg in chunk_segments:
                         seg.start += offset
                         seg.end += offset

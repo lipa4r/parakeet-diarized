@@ -36,6 +36,11 @@ DEFAULT_INCLUDE_DIARIZATION_IN_TEXT = True
 DEFAULT_USE_CUDA_GRAPH_DECODER = False
 DEFAULT_CUDNN_BENCHMARK = False
 DEFAULT_FORCE_FP32 = False
+DEFAULT_USE_BF16 = False
+
+# Attention model auto-switching
+DEFAULT_AUTO_ATTENTION = False
+DEFAULT_LOCAL_ATTENTION_THRESHOLD = 60  # seconds
 
 
 def _env_int(name: str, default: int) -> int:
@@ -98,6 +103,17 @@ class Config:
         self.force_fp32 = os.environ.get(
             "FORCE_FP32", str(DEFAULT_FORCE_FP32)
         ).lower() == "true"
+        self.use_bf16 = os.environ.get(
+            "USE_BF16", str(DEFAULT_USE_BF16)
+        ).lower() == "true"
+
+        # Attention model auto-switching
+        self.auto_attention = os.environ.get(
+            "AUTO_ATTENTION", str(DEFAULT_AUTO_ATTENTION)
+        ).lower() == "true"
+        self.local_attention_threshold = _env_int(
+            "LOCAL_ATTENTION_THRESHOLD", DEFAULT_LOCAL_ATTENTION_THRESHOLD
+        )
 
         # File paths
         self.temp_dir = os.environ.get("TEMP_DIR", "/tmp/parakeet")
@@ -121,6 +137,11 @@ class Config:
 
         if not (1 <= self.chunk_duration <= 7200):
             errors.append(f"CHUNK_DURATION must be 1–7200 seconds (got {self.chunk_duration})")
+
+        if not (1 <= self.local_attention_threshold <= 7200):
+            errors.append(
+                f"LOCAL_ATTENTION_THRESHOLD must be 1–7200 seconds (got {self.local_attention_threshold})"
+            )
 
         if not self.temp_dir or not self.temp_dir.strip():
             errors.append("TEMP_DIR must not be empty")
@@ -152,6 +173,9 @@ class Config:
             "use_cuda_graph_decoder": self.use_cuda_graph_decoder,
             "cudnn_benchmark": self.cudnn_benchmark,
             "force_fp32": self.force_fp32,
+            "use_bf16": self.use_bf16,
+            "auto_attention": self.auto_attention,
+            "local_attention_threshold": self.local_attention_threshold,
         }
 
 
