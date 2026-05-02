@@ -15,7 +15,7 @@ torch.backends.cudnn.allow_tf32 = True
 
 from models import WhisperSegment, TranscriptionResponse, ModelInfo, ModelList
 from audio import convert_audio_to_wav, split_audio_into_chunks
-from transcription import load_model, format_srt, format_vtt, transcribe_audio_chunks, compute_batch_size
+from transcription import load_model, format_srt, format_vtt, transcribe_audio_chunk
 from diarization import Diarizer
 from config import get_config
 
@@ -226,41 +226,26 @@ def create_app() -> FastAPI:
             elif diarize and diarizer is None:
                 logger.warning("Diarization requested but pipeline not available (no HF token or load failed)")
 
-            # Transcribe all chunks in a single batched model.transcribe() call
+            # Transcribe all chunks
             all_text = []
             all_segments = []
-
-            batch_size = 1
-            if torch.cuda.is_available() and len(audio_chunks) > 1:
-                gpu_mem_gb = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
-                batch_size = compute_batch_size(gpu_mem_gb, effective_chunk_duration)
-                logger.info(f"GPU {gpu_mem_gb:.1f} GB → batch_size={batch_size} for {len(audio_chunks)} chunk(s)")
-
-            try:
-                chunk_results = transcribe_audio_chunks(
-                    asr_model, audio_chunks, batch_size=batch_size,
-                    language=language, word_timestamps=word_timestamps,
+            for i, chunk_path in enumerate(audio_chunks):
+                logger.info(f"Processing chunk {i+1}/{len(audio_chunks)}")
+                chunk_text, chunk_segments = transcribe_audio_chunk(
+                    asr_model,
+                    chunk_path,
+                    language=language,
+                    word_timestamps=word_timestamps,
                     force_fp32=effective_force_fp32,
                     use_cuda_graph_decoder=effective_use_cuda_graph_decoder,
                 )
-            except torch.cuda.OutOfMemoryError:
-                logger.warning(f"OOM with batch_size={batch_size}, retrying with batch_size=1")
-                torch.cuda.empty_cache()
-                chunk_results = transcribe_audio_chunks(
-                    asr_model, audio_chunks, batch_size=1,
-                    language=language, word_timestamps=word_timestamps,
-                    force_fp32=effective_force_fp32,
-                    use_cuda_graph_decoder=effective_use_cuda_graph_decoder,
-                )
-
-            for i, (chunk_text, chunk_segs) in enumerate(chunk_results):
                 if i > 0:
                     offset = i * effective_chunk_duration
-                    for seg in chunk_segs:
+                    for seg in chunk_segments:
                         seg.start += offset
                         seg.end += offset
                 all_text.append(chunk_text)
-                all_segments.extend(chunk_segs)
+                all_segments.extend(chunk_segments)
 
             full_text = " ".join(all_text)
 
