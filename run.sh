@@ -17,6 +17,9 @@ HF_TOKEN=""
 CUDA_GRAPH_DECODER=0
 CUDNN_BENCHMARK_FLAG=0
 FORCE_FP32=0
+USE_BF16=0
+AUTO_ATTENTION=0
+AUTO_ATTENTION_THRESHOLD=""
 CHUNK_DURATION_ARG=""
 CPU_THREADS=""
 WORKERS=1
@@ -57,6 +60,18 @@ while [[ $# -gt 0 ]]; do
             FORCE_FP32=1
             shift
             ;;
+        --use-bf16)
+            USE_BF16=1
+            shift
+            ;;
+        --auto-attention)
+            AUTO_ATTENTION=1
+            shift
+            ;;
+        --auto-attention-threshold)
+            AUTO_ATTENTION_THRESHOLD="$2"
+            shift 2
+            ;;
         --chunk-duration)
             CHUNK_DURATION_ARG="$2"
             shift 2
@@ -81,6 +96,9 @@ while [[ $# -gt 0 ]]; do
             echo -e "  --cuda-graph-decoder       Enable NeMo CUDA graph decoder (default: off, unstable on sm_120)"
             echo -e "  --cudnn-benchmark          Enable torch.backends.cudnn.benchmark (default: off)"
             echo -e "  --force-fp32               Force FP32 inference, disable autocast (default: off)"
+            echo -e "  --use-bf16                 BF16 autocast in model.transcribe() — recommended on RTX 4070/5070"
+            echo -e "  --auto-attention           Auto-switch encoder attention based on audio length (default: off)"
+            echo -e "  --auto-attention-threshold SEC  Duration threshold in seconds for local attention (default: 60)"
             echo -e "  --chunk-duration SEC       Audio chunk duration in seconds (default: 500)"
             echo -e "  --cpu-threads N            Limit CPU threads for PyTorch/OpenMP/MKL (OMP_NUM_THREADS)"
             echo -e "  --workers N                Number of uvicorn worker processes (default: 1)."
@@ -163,6 +181,21 @@ fi
 if [[ $FORCE_FP32 -eq 1 ]]; then
     echo -e "${YELLOW}Forcing FP32 inference (autocast disabled).${NC}"
     export FORCE_FP32=true
+fi
+
+if [[ $USE_BF16 -eq 1 ]]; then
+    echo -e "${YELLOW}BF16 autocast enabled.${NC}"
+    export USE_BF16=true
+fi
+
+if [[ $AUTO_ATTENTION -eq 1 ]]; then
+    echo -e "${YELLOW}Auto attention switching enabled.${NC}"
+    export AUTO_ATTENTION=true
+fi
+
+if [[ -n "$AUTO_ATTENTION_THRESHOLD" ]]; then
+    echo -e "${BLUE}Local attention threshold: ${AUTO_ATTENTION_THRESHOLD}s${NC}"
+    export LOCAL_ATTENTION_THRESHOLD="$AUTO_ATTENTION_THRESHOLD"
 fi
 
 if [[ -n "$CHUNK_DURATION_ARG" ]]; then
