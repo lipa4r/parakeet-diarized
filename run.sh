@@ -213,8 +213,12 @@ if [[ -n "$CPU_THREADS" ]]; then
     echo -e "${BLUE}CPU threads: ${CPU_THREADS} of ${AVAILABLE_CORES:-?} available${NC}"
     export OMP_NUM_THREADS="$CPU_THREADS"
     export MKL_NUM_THREADS="$CPU_THREADS"
+    export NUMEXPR_MAX_THREADS="$CPU_THREADS"
 else
     echo -e "${BLUE}CPU threads: auto (${AVAILABLE_CORES:-?} available)${NC}"
+    if [[ -n "$AVAILABLE_CORES" ]]; then
+        export NUMEXPR_MAX_THREADS="$AVAILABLE_CORES"
+    fi
 fi
 
 # Run the server
