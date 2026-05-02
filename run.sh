@@ -203,10 +203,18 @@ if [[ -n "$CHUNK_DURATION_ARG" ]]; then
     export CHUNK_DURATION="$CHUNK_DURATION_ARG"
 fi
 
+AVAILABLE_CORES=$(nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo "")
+
 if [[ -n "$CPU_THREADS" ]]; then
-    echo -e "${BLUE}CPU threads limited to: ${CPU_THREADS}${NC}"
+    if [[ -n "$AVAILABLE_CORES" ]] && (( CPU_THREADS > AVAILABLE_CORES )); then
+        echo -e "${YELLOW}Requested ${CPU_THREADS} CPU threads but only ${AVAILABLE_CORES} available — capping.${NC}"
+        CPU_THREADS="$AVAILABLE_CORES"
+    fi
+    echo -e "${BLUE}CPU threads: ${CPU_THREADS} of ${AVAILABLE_CORES:-?} available${NC}"
     export OMP_NUM_THREADS="$CPU_THREADS"
     export MKL_NUM_THREADS="$CPU_THREADS"
+else
+    echo -e "${BLUE}CPU threads: auto (${AVAILABLE_CORES:-?} available)${NC}"
 fi
 
 # Run the server
