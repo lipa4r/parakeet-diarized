@@ -246,12 +246,23 @@ Use the `run.sh` script to configure and start the server:
 ```bash
 ./run.sh --help
 # Options:
-#   --debug             Enable debug mode
-#   --port PORT         Set server port (default: 8000)
-#   --host HOST         Set server host (default: 0.0.0.0)
-#   --skip-deps-check   Skip dependency checking
-#   --hf-token TOKEN    Set HuggingFace access token for speaker diarization
-#   --help              Show help message
+#   --debug                          Enable debug mode
+#   --port PORT                      Set server port (default: 8000)
+#   --host HOST                      Set server host (default: 0.0.0.0)
+#   --skip-deps-check                Skip dependency checking
+#   --hf-token TOKEN                 HuggingFace access token for speaker diarization
+#   --cuda-graph-decoder             Enable NeMo CUDA graph decoder (unstable on sm_120)
+#   --cudnn-benchmark                Enable torch.backends.cudnn.benchmark
+#   --force-fp32                     Force FP32 inference, disable autocast
+#   --use-bf16                       BF16 autocast — recommended on RTX 4070/5070
+#   --auto-attention                 Auto-switch encoder attention based on audio length
+#   --auto-attention-threshold SEC   Duration threshold for local attention (default: 60)
+#   --chunk-duration SEC             Audio chunk duration in seconds (default: 500)
+#   --cpu-threads N                  CPU threads for PyTorch/OpenMP/MKL/NumExpr.
+#                                    Auto (default): all available cores.
+#                                    N > available cores: capped automatically.
+#   --workers N                      Uvicorn worker processes (default: 1, each uses full VRAM)
+#   --help                           Show this help message
 ```
 
 **Environment Variables** (for settings not available as command line arguments):
@@ -271,6 +282,9 @@ Use the `run.sh` script to configure and start the server:
 | `USE_BF16` | BF16 autocast in `model.transcribe()` — recommended on RTX 4070/5070 | `false` |
 | `AUTO_ATTENTION` | Auto-switch encoder attention based on audio length | `false` |
 | `LOCAL_ATTENTION_THRESHOLD` | Duration threshold (s) for switching to local attention | `60` |
+| `OMP_NUM_THREADS` | CPU threads for PyTorch/OpenMP (set by `--cpu-threads`, default: all cores) | — |
+| `MKL_NUM_THREADS` | CPU threads for MKL (set together with `OMP_NUM_THREADS`) | — |
+| `NUMEXPR_MAX_THREADS` | CPU threads for NumExpr (set automatically to match `OMP_NUM_THREADS`) | — |
 
 ## Performance
 

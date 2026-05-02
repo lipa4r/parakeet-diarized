@@ -35,6 +35,9 @@ FastAPI serwer transkrypcji audio zgodny z API OpenAI Whisper (`/v1/audio/transc
 | `USE_BF16` | BF16 autocast w `model.transcribe()` — zalecane na RTX 4070/5070 | `false` |
 | `AUTO_ATTENTION` | Automatyczne przełączanie uwagi enkodera wg długości audio | `false` |
 | `LOCAL_ATTENTION_THRESHOLD` | Próg długości audio (s) do przełączenia na lokalną uwagę | `60` |
+| `OMP_NUM_THREADS` | Wątki CPU dla PyTorch/OpenMP (`--cpu-threads`; domyślnie wszystkie rdzenie) | — |
+| `MKL_NUM_THREADS` | Wątki CPU dla MKL (ustawiane razem z `OMP_NUM_THREADS`) | — |
+| `NUMEXPR_MAX_THREADS` | Wątki CPU dla NumExpr (ustawiane automatycznie = `OMP_NUM_THREADS`) | — |
 
 ### Parametry endpointu (Form, override per request)
 
