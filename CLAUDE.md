@@ -11,7 +11,7 @@ FastAPI serwer transkrypcji audio zgodny z API OpenAI Whisper (`/v1/audio/transc
 ## Uruchomienie
 
 ```bash
-# Wymagania: Python 3.10–3.11, ffmpeg, token HuggingFace (dla diaryzacji)
+# Wymagania: Python 3.10–3.12, ffmpeg, token HuggingFace (dla diaryzacji)
 ./run.sh --hf-token <TOKEN>
 
 # Opcje:

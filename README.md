@@ -286,6 +286,16 @@ Use the `run.sh` script to configure and start the server:
 | `MKL_NUM_THREADS` | CPU threads for MKL (set together with `OMP_NUM_THREADS`) | — |
 | `NUMEXPR_MAX_THREADS` | CPU threads for NumExpr (set automatically to match `OMP_NUM_THREADS`) | — |
 
+### NVIDIA Blackwell (on WSL2)
+
+On Blackwell architecture under WSL2 you can enable the following flags for better performance:
+
+```bash
+--cudnn-benchmark --use-bf16
+```
+
+Warning: Enabling --cuda-graph-decoder causes stability issues on Blackwell in WSL2. It is currently not recommended.
+
 ## Performance
 
 The [NVIDIA Parakeet-TDT model](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) offers:
@@ -304,6 +314,7 @@ This project builds upon excellent work by:
 
 - **NVIDIA NeMo Team**: For the outstanding [Parakeet-TDT model](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) that provides state-of-the-art speech recognition
 - **Pyannote Team**: For the powerful [Pyannote.audio](https://github.com/pyannote/pyannote-audio) speaker diarization toolkit
+- **jfgonsalves**: Initial preparation of scripts for parakeet-tdt-0.6b-v2 version.
 
 ## License
 
